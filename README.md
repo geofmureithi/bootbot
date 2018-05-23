@@ -8,7 +8,7 @@ BootBot is a simple but powerful JavaScript Framework to build Facebook Messenge
 |---|---|---|---|---|---|---|---|
 
 
-**[ :speech_balloon: Questions / Comments? Join our Slack channel!](https://bootbot.slack.com/shared_invite/MTQwODA0MDU2NDUxLTE0ODcwMTQ1MjgtNTc3MDVhOWRjZQ)**
+**[ :speech_balloon: Questions / Comments? Join our Slack channel!](https://bootbot-slack-channel.herokuapp.com/)**
 
 ## Features
 
@@ -17,7 +17,7 @@ BootBot is a simple but powerful JavaScript Framework to build Facebook Messenge
 - Start **conversations**, **ask** questions and save important information in the **context** of the conversation.
 - Organize your code in **modules**.
 - Send automatic or manual **typing indicators**.
-- Set threads such as a **persistent menu**, a **greeting text** or a **get started CTA**.
+- Set your bot's properties, such as a **persistent menu**, a **greeting text** or a **get started CTA**.
 - Subscribe to **received** and **read** events.
 
 ## Usage
@@ -53,6 +53,8 @@ Creating a Giphy Chat Bot in 3 minutes:
 ## Getting Started
 
 - Install BootBot via NPM, create a new `index.js`, require BootBot and create a new bot instance using your Facebook Page's / App's `accessToken`, `verifyToken` and `appSecret`:
+
+**Note:** If you don't know how to get these tokens, take a look at Facebook's [Quick Start Guide](https://developers.facebook.com/docs/messenger-platform/guides/quick-start) or check out [this issue](https://github.com/Charca/bootbot/issues/56).
 
 ```javascript
 // index.js
@@ -122,10 +124,7 @@ bot.hear('image', (payload, chat) => {
 
 ```javascript
 bot.hear('ask me something', (payload, chat) => {
-	chat.conversation((convo) => {
-		askName(convo);
-	});
-	
+
 	const askName = (convo) => {
 		convo.ask(`What's your name?`, (payload, convo) => {
 			const text = payload.message.text;
@@ -133,7 +132,7 @@ bot.hear('ask me something', (payload, chat) => {
 			convo.say(`Oh, your name is ${text}`).then(() => askFavoriteFood(convo));
 		});
 	};
-	
+
 	const askFavoriteFood = (convo) => {
 		convo.ask(`What's your favorite food?`, (payload, convo) => {
 			const text = payload.message.text;
@@ -141,19 +140,23 @@ bot.hear('ask me something', (payload, chat) => {
 			convo.say(`Got it, your favorite food is ${text}`).then(() => sendSummary(convo));
 		});
 	};
-	
+
 	const sendSummary = (convo) => {
 		convo.say(`Ok, here's what you told me about you:
 	      - Name: ${convo.get('name')}
 	      - Favorite Food: ${convo.get('food')}`);
       convo.end();
 	};
+
+	chat.conversation((convo) => {
+		askName(convo);
+	});
 });
 ```
 
 - Set up webhooks and start the express server:
 
-```
+```javascript
 bot.start();
 ```
 
@@ -184,9 +187,12 @@ Then use the provided HTTPS URL to config your webhook on Facebook's Dashboard. 
 | `accessToken` | string | | `Y` |
 | `verifyToken` | string | | `Y` |
 | `appSecret` | string | | `Y` |
+| `webhook` | string | `"/webhook"` | `N` |
 | `broadcastEchoes` | boolean | `false` | `N` |
 
 Creates a new `BootBot` instance. Instantiates the new express app and all required webhooks. `options` param must contain all tokens and app secret of your Facebook app. Optionally, set `broadcastEchoes` to `true` if you want the messages your bot send to be echoed back to it (you probably don't need this feature unless you have multiple bots running on the same Facebook page).
+
+If you want to specify a custom endpoint name for your webhook, you can do it with the `webhook` option.
 
 #### `.start([ port ])`
 
@@ -224,6 +230,7 @@ Subscribe to an event emitted by the bot, and execute a callback when those even
 | `delivery` | The bot received a confirmation that your message was delivered to the user |
 | `read` | The bot received a confirmation that your message was read by the user |
 | `authentication` | A user has started a conversation with the bot using a "Send to Messenger" button |
+| `referral` | A user that already has a thread with the bot starts a conversation. [more](https://developers.facebook.com/docs/messenger-platform/reference/webhook-events/messaging_referrals) |
 
 You can also subscribe to specific postbacks and quick replies by using a namespace. For example `postback:ADD_TO_CART` subscribes only to the postback event containing the `ADD_TO_CART` payload.
 
@@ -326,9 +333,10 @@ You'll likely use the Send API methods from the `Chat` or `Conversation` instanc
 
 Send a message to the user. The `.say()` method can be used to send text messages, button messages, messages with quick replies or attachments. If you want to send a different type of message (like a generic template), see the Send API method for that specific type of message.
 
-The `message` param can be a string or an object:
+The `message` param can be a string an array, or an object:
 
 - If `message` is a string, the bot will send a text message.
+- If `message` is an array, the `.say()` method will be called once for each element in the array.
 - If `message` is an object, the message type will depend on the object's format:
 
 ```javascript
@@ -351,10 +359,40 @@ chat.say({
 	]
 });
 
+// Send a list template
+chat.say({
+	elements: [
+		{ title: 'Artile 1', image_url: '/path/to/image1.png', default_action: {} },
+		{ title: 'Artile 2', image_url: '/path/to/image2.png', default_action: {} }
+	],
+	buttons: [
+		{ type: 'postback', title: 'View More', payload: 'VIEW_MORE' }
+	]
+});
+
+// Send a generic template
+chat.say({
+	cards: [
+		{ title: 'Card 1', image_url: '/path/to/image1.png', default_action: {} },
+		{ title: 'Card 2', image_url: '/path/to/image2.png', default_action: {} }
+	]
+});
+
 // Send an attachment
 chat.say({
 	attachment: 'video',
 	url: 'http://example.com/video.mp4'
+});
+
+// Passing an array will make subsequent calls to the .say() method
+// For example, calling:
+
+chat.say(['Hello', 'How are you?']);
+
+// is the same as:
+
+chat.say('Hello').then(() => {
+  chat.say('How are you?')
 });
 ```
 
@@ -363,6 +401,9 @@ The `options` param can contain:
 | `options` key | Type | Default | Description |
 |:--------------|:-----|:--------|:---------|
 | `typing` | boolean or number | `false` | Send a typing indicator before sending the message. If set to `true`, it will automatically calculate how long it lasts based on the message length. If it's a number, it will show the typing indicator for that amount of milliseconds (max. `20000` - 20 seconds) |
+| `messagingType` | string | `'RESPONSE'` | The messaging type of the message being sent. |
+| `notificationType` | string | | Push notification type: `'REGULAR'`: sound/vibration - `'SILENT_PUSH'`: on-screen notification only - `'NO_PUSH'`: no notification. |
+| `tag` | string | | The message tag string. Can only be used if `messagingType` is set to `'MESSAGE_TAG'` |
 | `onDelivery` | function | | Callback that will be executed when the message is received by the user. Receives params: `(payload, chat, data)` |
 | `onRead` | function | | Callback that will be executed when the message is read by the user. Receives params: `(payload, chat, data)` |
 
@@ -404,7 +445,21 @@ The `options` param is identical to the `options` param of the [`.say()`](#say) 
 
 The `elements` param must be an array of [element objects](https://developers.facebook.com/docs/messenger-platform/send-api-reference/generic-template).
 
-The `options` param is identical to the `options` param of the [`.say()`](#say) method.
+The `options` param extends `options` param of the [`.say()`](#say) method with `imageAspectRatio` property.
+
+#### `.sendListTemplate()`
+
+| Method signature |
+|:-----------------|
+| `chat.sendListTemplate(elements, buttons, [ options ])` |
+| `convo.sendListTemplate(elements, buttons, [ options ])` |
+| `bot.sendListTemplate(userId, elements, buttons, [ options ])` |
+
+The `elements` param must be an array of [element objects](https://developers.facebook.com/docs/messenger-platform/send-api-reference/list-template).
+
+The `buttons` param can be an array with one element: string or [button object](https://developers.facebook.com/docs/messenger-platform/send-api-reference/list-template).
+
+The `options` param extends `options` param of the [`.say()`](#say) method with `topElementStyle` property.
 
 #### `.sendTemplate()`
 
@@ -503,7 +558,7 @@ Messages sent by the user won't trigger a global `message`, `postback`, `attachm
 | Method signature |
 |:-----------------|
 | `chat.conversation(factory)` |
-| `bot.sendButtonTemplate(userId, factory)` |
+| `bot.conversation(userId, factory)` |
 
 Starts a new conversation with the user.
 
@@ -567,7 +622,7 @@ const options = {
 	typing: true // Send a typing indicator before asking the question
 };
 
-convo.ask(question, answer, callback, options);
+convo.ask(question, answer, callbacks, options);
 ```
 
 #### `convo.set(property, value)`
@@ -631,21 +686,23 @@ Take a look at the `examples/module-example.js` file for a complete example.
 
 ---
 
-### Threads
+### Messenger Profile API
 
 #### `.setGreetingText(text)`
 
-[Facebook Docs](https://developers.facebook.com/docs/messenger-platform/thread-settings/greeting-text)
+[Facebook Docs](https://developers.facebook.com/docs/messenger-platform/messenger-profile/greeting-text)
 
 | Param | Type | Default | Required |
 |:------|:-----|:--------|:---------|
-| `text` | string | | `Y` |
+| `text` | string or array | | `Y` |
 
 Set a greeting text for new conversations. The Greeting Text is only rendered the first time the user interacts with a the Page on Messenger.
 
+**Localization support:** `text` can be a string containing the greeting text, or an array of objects to support multiple locales. For more info on the format of these objects, see [the documentation](https://developers.facebook.com/docs/messenger-platform/messenger-profile/greeting-text).
+
 #### `.setGetStartedButton(action)`
 
-[Facebook Docs](https://developers.facebook.com/docs/messenger-platform/thread-settings/get-started-button)
+[Facebook Docs](https://developers.facebook.com/docs/messenger-platform/messenger-profile/get-started-button)
 
 | Param | Type | Default | Required |
 |:------|:-----|:--------|:---------|
@@ -657,19 +714,57 @@ React to a user starting a conversation with the bot by clicking the Get Started
 
 Removes the Get Started button call to action.
 
-#### `.setPersistentMenu(buttons)`
+#### `.setPersistentMenu(buttons, [ disableInput ])`
 
-[Facebook Docs](https://developers.facebook.com/docs/messenger-platform/thread-settings/persistent-menu)
+[Facebook Docs](https://developers.facebook.com/docs/messenger-platform/messenger-profile/persistent-menu)
 
 | Param | Type | Default | Required |
 |:------|:-----|:--------|:---------|
 | `buttons` | array of strings or objects | | `Y` |
+| `disableInput ` | boolean | `false` | `N` |
 
-Creates a Persistent Menu that is available at any time during the conversation. The `buttons` param can be an array of strings or button objects.
+Creates a Persistent Menu that is available at any time during the conversation. The `buttons` param can be an array of strings, button objects, or locale objects.
+
+If `disableInput` is set to `true`, it will disable user input in the menu. The user will only be able to interact with the bot via the menu, postbacks, buttons and webviews.
+
+**Localization support:** if `buttons` is an array of objects containing a `locale` attribute, it will be used as-is, expecting it to be an array of localized menues. For more info on the format of these objects, see [the documentation](https://developers.facebook.com/docs/messenger-platform/messenger-profile/persistent-menu).
 
 #### `.deletePersistentMenu()`
 
 Removes the Persistent Menu.
+
+----------------------
+
+### Bypassing Express
+
+You may only want to use bootbot for the Facebook related config and the simple to use Send API features but handle routing from somewhere else. Or there may be times where you want to send a message out of band, like if you get a postback callback and need to end a conversation flow immediately.
+
+Or maybe you don't want to use express but a different HTTP server.
+
+#### `.handleFacebookData(data)`
+
+Use this to send a message from a parsed webhook message directly to your bot.
+
+```js
+const linuxNewsBot   = new BootBot({argz});
+const appleNewsBot   = new BootBot({argz});
+const windowsNewsBot = new BootBot({argz});
+
+myNonExpressRouter.post("/mywebhook", (data) => {
+	const messages = data.entry[0].messaging;
+	messages.forEach(message => {
+		switch(data.entry.id) {
+			case LINUX_BOT_PAGE_ID:
+				linuxNewsBot.handleFacebookData(message);
+				break;
+			case APPLE_BOT_PAGE_ID:
+				appleNewsBot.handleFacebookData(message);
+				break;
+			// ...
+		};
+	});
+});
+```
 
 ## Examples
 
@@ -679,7 +774,7 @@ Check the `examples` directory to see more demos of:
 - A bot that searches for random gifs
 - An example conversation with questions and answers
 - How to organize your code using modules
-- How to use threads to set a Persistent Menu or a Get Started CTA
+- How to use the Messenger Profile API to set a Persistent Menu or a Get Started CTA
 - How to get the user's profile information
 
 To run the examples, make sure to complete the `examples/config/default.json` file with your bot's tokens, and then cd into the `examples` folder and run the desired example with node. For example:
